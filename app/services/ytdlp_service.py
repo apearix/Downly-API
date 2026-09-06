@@ -21,7 +21,6 @@ def parse_quality_to_height(quality: Optional[str]) -> int:
 
 def get_base_ydl_opts(extra_opts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     cookies_path = config.get_cookies_path()
-    # mweb and web are supported by bgutil PO token provider and yield full 1080p+ formats
     client_list = ["mweb", "web", "default"]
 
     opts: Dict[str, Any] = {
@@ -32,6 +31,7 @@ def get_base_ydl_opts(extra_opts: Optional[Dict[str, Any]] = None) -> Dict[str, 
         "fragment_retries": 3,
         "remote_components": ["ejs:github"],
         "js_runtimes": {"deno": {}, "node": {}},
+        "plugin_dirs": ["default", "/opt/bgutil-ytdlp-pot-provider/plugin", "/root/yt-dlp-plugins", "/etc/yt-dlp/plugins"],
         "extractor_args": {
             "youtube": {
                 "player_client": client_list,

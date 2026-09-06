@@ -1,4 +1,4 @@
-﻿import yt_dlp
+import yt_dlp
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app import config
@@ -27,8 +27,8 @@ app.include_router(info_router)
 app.include_router(download_router)
 app.include_router(jobs_router)
 
-@app.get("/")
-@app.get("/health")
+@app.api_route("/", methods=["GET", "HEAD"])
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
     return {
         "status": "ok",
