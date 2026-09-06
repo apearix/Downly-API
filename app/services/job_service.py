@@ -1,8 +1,7 @@
-﻿import time
+import time
 import uuid
 import threading
 import shutil
-import re
 from pathlib import Path
 from typing import Dict, Optional, Any
 from app import config
@@ -17,6 +16,7 @@ class JobManager:
 
     def create_job(self, url: str, media_type: str, quality: str) -> JobDto:
         job_id = str(uuid.uuid4())
+        now = int(time.time() * 1000)
         job = JobDto(
             id=job_id,
             url=url,
@@ -24,7 +24,11 @@ class JobManager:
             quality=quality,
             status="queued",
             progress=JobProgress(percentage=0.0, phase="Queued for processing"),
-            downloadUrl=f"/api/download/{job_id}",
+            downloadUrl=None,
+            outputFormat="mp3" if media_type == "audio" else "mp4",
+            createdAt=now,
+            updatedAt=now,
+            expiresAt=now + 1800000,
         )
         with self._lock:
             self._jobs[job_id] = job
@@ -55,6 +59,7 @@ class JobManager:
         with self._lock:
             job.status = "processing"
             job.progress.phase = "Starting download..."
+            job.updatedAt = int(time.time() * 1000)
 
         job_dir = config.STORAGE_DIR / job_id
         job_dir.mkdir(parents=True, exist_ok=True)
@@ -63,18 +68,21 @@ class JobManager:
         def progress_hook(d: Dict[str, Any]):
             status = d.get("status")
             with self._lock:
+                job.updatedAt = int(time.time() * 1000)
                 if status == "downloading":
                     total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
                     downloaded = d.get("downloaded_bytes") or 0
                     percent = (downloaded / total * 100) if total > 0 else 0.0
                     job.progress.percentage = round(percent, 1)
+                    job.progress.downloadedBytes = downloaded
+                    job.progress.totalBytes = total
                     job.progress.phase = "Downloading media streams..."
                     speed = d.get("speed")
                     if speed:
                         job.progress.speed = f"{speed / (1024*1024):.1f} MB/s"
                     eta = d.get("eta")
                     if eta:
-                        job.progress.eta = int(eta)
+                        job.progress.eta = f"{int(eta)}s"
                 elif status == "finished":
                     job.progress.percentage = 95.0
                     job.progress.phase = "Merging video and audio via FFmpeg..."
@@ -88,23 +96,34 @@ class JobManager:
                 progress_hook=progress_hook,
             )
 
-            # Locate the generated file
-            files = list(job_dir.glob("*.*"))
-            if not files:
+            # Locate the generated output file
+            all_files = [f for f in job_dir.glob("*.*") if not f.name.endswith(".part")]
+            if not all_files:
                 raise FileNotFoundError("Merged file was not created by FFmpeg.")
 
-            result_file = files[0]
+            if job.type == "audio":
+                audio_files = [f for f in all_files if f.suffix.lower() == ".mp3"]
+                result_file = audio_files[0] if audio_files else all_files[0]
+            else:
+                video_files = [f for f in all_files if f.suffix.lower() == ".mp4"]
+                result_file = video_files[0] if video_files else all_files[0]
+
             with self._lock:
                 job.status = "completed"
                 job.filename = result_file.name
+                job.fileSize = result_file.stat().st_size
+                job.outputFormat = "mp3" if job.type == "audio" else "mp4"
+                job.downloadUrl = f"/api/download/{job_id}"
                 job.progress.percentage = 100.0
                 job.progress.phase = "Ready for download"
+                job.updatedAt = int(time.time() * 1000)
 
         except Exception as exc:
             with self._lock:
                 job.status = "failed"
                 job.error = str(exc)
                 job.progress.phase = "Processing failed"
+                job.updatedAt = int(time.time() * 1000)
 
     def _start_cleanup_timer(self):
         def cleanup_loop():

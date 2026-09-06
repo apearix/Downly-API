@@ -1,11 +1,11 @@
-﻿from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from app.schemas.job import JobCreateRequest, JobCreateResponse, JobStatusResponse
 from app.core.url import validate_and_normalize_youtube_url
 from app.services.job_service import job_manager
 
 router = APIRouter(prefix="/api", tags=["jobs"])
 
-@router.post("/jobs", response_model=JobCreateResponse)
+@router.post("/jobs", response_model=JobCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_download_job(payload: JobCreateRequest):
     is_valid, normalized_url, error = validate_and_normalize_youtube_url(payload.url)
     if not is_valid or not normalized_url:
@@ -20,7 +20,7 @@ async def create_download_job(payload: JobCreateRequest):
         quality=quality,
     )
 
-    return JobCreateResponse(success=True, job=job)
+    return JobCreateResponse(success=True, jobId=job.id, job=job)
 
 @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
 async def get_job_status(job_id: str):
