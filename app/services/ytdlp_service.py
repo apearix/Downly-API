@@ -21,7 +21,8 @@ def parse_quality_to_height(quality: Optional[str]) -> int:
 
 def get_base_ydl_opts(extra_opts: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     cookies_path = config.get_cookies_path()
-    client_list = ["mweb", "web", "default"] if cookies_path else ["android_vr", "android", "ios", "web_embedded", "mweb"]
+    # mweb and web are supported by bgutil PO token provider and yield full 1080p+ formats
+    client_list = ["mweb", "web", "default"]
 
     opts: Dict[str, Any] = {
         "noplaylist": True,
@@ -34,9 +35,13 @@ def get_base_ydl_opts(extra_opts: Optional[Dict[str, Any]] = None) -> Dict[str, 
         "extractor_args": {
             "youtube": {
                 "player_client": client_list,
-                "youtubepot_bgutilhttp:base_url": [config.BGUTIL_URL],
-                "youtubepot_bgutilscript:disabled": ["true"],
-            }
+            },
+            "youtubepot-bgutilhttp": {
+                "base_url": [config.BGUTIL_URL],
+            },
+            "youtubepot-bgutilscript": {
+                "disabled": ["true"],
+            },
         },
     }
 
@@ -70,8 +75,9 @@ def extract_video_info(url: str) -> Dict[str, Any]:
 
     available_heights = set()
     for f in formats:
-        if f.get("vcodec") != "none" and f.get("height"):
-            available_heights.add(f["height"])
+        h = f.get("height")
+        if h and isinstance(h, int) and h > 0:
+            available_heights.add(h)
 
     qualities = []
     if available_heights:
